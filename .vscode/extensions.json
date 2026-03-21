@@ -1,0 +1,10 @@
+{
+	"recommendations": [
+		"biomejs.biome",
+		"yoavbls.pretty-ts-errors",
+		"meganrogge.template-string-converter",
+		"bradlc.vscode-tailwindcss",
+		"editorconfig.editorconfig",
+		"vivaxy.vscode-conventional-commits"
+	]
+}
