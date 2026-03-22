@@ -34,7 +34,14 @@ If you also want local HTTP development with `serverless-offline`:
 bun add -d serverless-offline
 ```
 
-Add the plugin to `serverless.yml` and disable the framework's built-in esbuild pipeline:
+Before using `serverless-rolldown`, disable Serverless Framework's built-in esbuild support:
+
+```yaml
+build:
+  esbuild: false
+```
+
+Then add the plugin to `serverless.yml`:
 
 ```yaml
 service: my-service
@@ -55,6 +62,8 @@ functions:
   hello:
     handler: src/hello.handler
 ```
+
+If you leave `esbuild` enabled, Serverless and this plugin will both try to control the build step.
 
 `serverless-offline` should come after `serverless-rolldown` in the plugin list.
 
