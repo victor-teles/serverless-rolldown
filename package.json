@@ -1,29 +1,31 @@
 {
-	"name": "serverless-rolldown",
-	"exports": {
-		".": "./dist/index.js"
-	},
-	"files": [
-		"dist"
-	],
-	"main": "./dist/index.js",
-	"module": "./dist/index.js",
-	"types": "./dist/index.d.ts",
-	"type": "module",
-	"scripts": {
-		"build": "bunx tsc -p tsconfig.build.json",
-		"format": "biome check --javascript-linter-enabled=false --write",
-		"lint": "biome lint --write",
-		"test": "bun test",
-		"typecheck": "bunx tsc --noEmit"
-	},
-	"devDependencies": {
-		"@types/bun": "latest",
-		"@biomejs/biome": "2.4.8"
-	},
-	"peerDependencies": {
-		"serverless": "^4",
-		"typescript": "^5",
-		"rolldown": "^1.0.0-rc.10"
-	}
+  "name": "serverless-rolldown",
+  "version": "0.0.0",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.build.json",
+    "format": "biome check --javascript-linter-enabled=false --write",
+    "lint": "biome lint --write",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "validate:example": "bun ./scripts/validate-example.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@biomejs/biome": "2.4.8"
+  },
+  "peerDependencies": {
+    "serverless": "^4",
+    "typescript": "^5",
+    "rolldown": "^1.0.0-rc.10"
+  }
 }

@@ -6,6 +6,7 @@ out
 dist
 *.tgz
 serverless-rolldown-build
+example/.serverless
 
 # code coverage
 coverage

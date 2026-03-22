@@ -1,0 +1,139 @@
+name: Publish npm package
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Validate tag and release target
+        id: validate_tag
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="${GITHUB_REF_NAME}"
+          if [[ ! "$TAG_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "Tag \"$TAG_NAME\" must match vX.Y.Z."
+            exit 1
+          fi
+
+          PACKAGE_VERSION="${BASH_REMATCH[1]}"
+
+          git fetch origin main --tags --force
+
+          TAG_COMMIT="$(git rev-list -n 1 "$TAG_NAME")"
+          MAIN_COMMIT="$(git rev-parse origin/main)"
+
+          if [[ "$TAG_COMMIT" != "$MAIN_COMMIT" ]]; then
+            echo "Tag \"$TAG_NAME\" must point to the current origin/main HEAD."
+            echo "tag commit:  $TAG_COMMIT"
+            echo "main commit: $MAIN_COMMIT"
+            exit 1
+          fi
+
+          {
+            echo "package_version=$PACKAGE_VERSION"
+            echo "tag_name=$TAG_NAME"
+            echo "tag_commit=$TAG_COMMIT"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out main
+        run: git checkout -B main origin/main
+
+      - name: Sync package.json version from tag
+        id: sync_version
+        env:
+          PACKAGE_VERSION: ${{ steps.validate_tag.outputs.package_version }}
+        run: |
+          set -euo pipefail
+
+          CURRENT_VERSION="$(bun --eval 'const pkg = await Bun.file("package.json").json(); console.log(pkg.version);')"
+
+          if [[ "$CURRENT_VERSION" == "$PACKAGE_VERSION" ]]; then
+            echo "package_json_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          bun --eval '
+            const file = Bun.file("package.json");
+            const pkg = await file.json();
+            pkg.version = process.env.PACKAGE_VERSION;
+            await Bun.write("package.json", `${JSON.stringify(pkg, null, 2)}\n`);
+          '
+
+          echo "package_json_changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun test
+
+      - name: Run typecheck
+        run: bun run typecheck
+
+      - name: Build package
+        run: bun run build
+
+      - name: Validate npm token
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$NPM_TOKEN" ]]; then
+            echo "The NPM_TOKEN repository secret is required to publish."
+            exit 1
+          fi
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish
+
+      - name: Commit package.json version to main
+        if: steps.sync_version.outputs.package_json_changed == 'true'
+        env:
+          TAG_NAME: ${{ steps.validate_tag.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add package.json
+
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+
+          git commit -m "chore(release): ${TAG_NAME} [skip ci]"
+          git push origin HEAD:main

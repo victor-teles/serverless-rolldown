@@ -1,0 +1,23 @@
+service: serverless-rolldown-example
+frameworkVersion: ^4
+
+build:
+  esbuild: false
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+
+plugins:
+  - serverless-rolldown
+  - serverless-offline
+
+functions:
+  hello:
+    handler: src/hello.handler
+  goodbye:
+    handler: src/goodbye.handler
+    events:
+      - httpApi:
+          path: /wallets
+          method: get
