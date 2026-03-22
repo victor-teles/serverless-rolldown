@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_OUT_DIR } from "../src/config";
 import ServerlessRolldown from "../src/serverless-rolldown";
@@ -8,9 +8,10 @@ import {
   createServerlessMock,
   pathExists,
   removeDirectory,
+  runBuiltHandlerWithNode,
 } from "./helpers";
 
-test("bundles service packages in one multi-entry build with shared chunks", async () => {
+test("bundles service packages as independent handler outputs", async () => {
   const serviceDir = await copyFixture("service");
   const serverless = createServerlessMock({
     functions: {
@@ -27,42 +28,44 @@ test("bundles service packages in one multi-entry build with shared chunks", asy
 
   try {
     await plugin.hooks["before:package:createDeploymentArtifacts"]?.();
+    const fooBuiltFile = path.join(
+      serviceDir,
+      DEFAULT_OUT_DIR,
+      "package",
+      "functions",
+      "foo",
+      "index.js",
+    );
+    const barBuiltFile = path.join(
+      serviceDir,
+      DEFAULT_OUT_DIR,
+      "package",
+      "functions",
+      "bar",
+      "index.js",
+    );
 
+    expect(await pathExists(fooBuiltFile)).toBeTrue();
+    expect(await pathExists(barBuiltFile)).toBeTrue();
     expect(
       await pathExists(
-        path.join(
-          serviceDir,
-          DEFAULT_OUT_DIR,
-          "package",
-          "functions",
-          "foo",
-          "index.js",
-        ),
-      ),
-    ).toBeTrue();
-    expect(
-      await pathExists(
-        path.join(
-          serviceDir,
-          DEFAULT_OUT_DIR,
-          "package",
-          "functions",
-          "bar",
-          "index.js",
-        ),
-      ),
-    ).toBeTrue();
-    expect(
-      await readdir(
         path.join(serviceDir, DEFAULT_OUT_DIR, "package", "_chunks"),
       ),
-    ).not.toHaveLength(0);
+    ).toBeFalse();
     expect(
       await readFile(
         path.join(serviceDir, DEFAULT_OUT_DIR, "package", "package.json"),
         "utf8",
       ),
     ).toContain('"type": "commonjs"');
+    expect(await runBuiltHandlerWithNode(fooBuiltFile)).toEqual({
+      stderr: "",
+      stdout: "foo:1",
+    });
+    expect(await runBuiltHandlerWithNode(barBuiltFile)).toEqual({
+      stderr: "",
+      stdout: "bar:1",
+    });
     expect(serverless.service.getFunction("foo").handler).toBe(
       `${DEFAULT_OUT_DIR}/package/functions/foo/index.handler`,
     );

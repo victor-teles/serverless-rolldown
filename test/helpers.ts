@@ -48,6 +48,39 @@ export async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
+export async function runBuiltHandlerWithNode(
+  builtFile: string,
+  nodePath?: string,
+): Promise<{ stderr: string; stdout: string }> {
+  const script = `
+const mod = require(${JSON.stringify(builtFile)});
+Promise.resolve(mod.handler())
+	.then((value) => {
+		process.stdout.write(String(value));
+	})
+	.catch((error) => {
+		console.error(error);
+		process.exit(1);
+	});
+`;
+  const processResult = Bun.spawn({
+    cmd: ["node", "-e", script],
+    env: {
+      ...process.env,
+      NODE_PATH: nodePath ?? "",
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+
+  await processResult.exited;
+
+  return {
+    stderr: await new Response(processResult.stderr).text(),
+    stdout: await new Response(processResult.stdout).text(),
+  };
+}
+
 export interface CreateServerlessMockOptions {
   configurationInput?: {
     functions?: Record<string, ServerlessFunctionDefinition>;

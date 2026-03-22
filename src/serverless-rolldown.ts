@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import {
   loadPluginRolldownConfig,
   resolveOutputDirectory,
-  runRolldownBuild,
+  runRolldownBuilds,
 } from "./config.js";
 import { stageLocalLayers } from "./layers.js";
 import {
@@ -124,28 +124,11 @@ export default class ServerlessRolldown {
       entryKey: string;
     }>,
   ): Promise<void> {
-    if (targets.length === 0) {
-      return;
-    }
-
-    if (targets.length === 1) {
-      await runRolldownBuild({
-        config,
-        localLayers,
-        outDir: stageOutDir,
-        serviceDir,
-        singleEntry: true,
-        targets,
-      });
-      return;
-    }
-
-    await runRolldownBuild({
+    await runRolldownBuilds({
       config,
       localLayers,
       outDir: stageOutDir,
       serviceDir,
-      singleEntry: false,
       targets,
     });
   }
@@ -352,16 +335,16 @@ export default class ServerlessRolldown {
         buildPlan.localLayers,
         stageOutDir,
       );
-      await this.runBuildTargets(
-        loadedConfig.config,
-        buildPlan.localLayers,
+      await runRolldownBuilds({
+        config: loadedConfig.config,
+        localLayers: buildPlan.localLayers,
+        outDir: stageOutDir,
         serviceDir,
-        stageOutDir,
-        buildPlan.targets.map((target) => ({
+        targets: buildPlan.targets.map((target) => ({
           entryFile: target.entryFile,
           entryKey: target.entryKey,
         })),
-      );
+      });
       manifest = createLocalBuildManifest(
         mode,
         serviceDir,

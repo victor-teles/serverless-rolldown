@@ -2,7 +2,7 @@ import { watch as createFileWatcher, type FSWatcher } from "node:fs";
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import type { RolldownOptions } from "rolldown";
-import { runRolldownBuild } from "./config.js";
+import { runRolldownBuilds } from "./config.js";
 import { stageLocalLayers } from "./layers.js";
 import {
   createLocalBuildManifest,
@@ -146,12 +146,11 @@ export class LocalWatchController {
       this.options.localLayers,
       this.options.stageOutDir,
     );
-    await runRolldownBuild({
+    await runRolldownBuilds({
       config: this.options.config,
       localLayers: this.options.localLayers,
       outDir: this.options.stageOutDir,
       serviceDir: this.options.serviceDir,
-      singleEntry: this.options.targets.length === 1,
       targets: this.options.targets.map((target) => ({
         entryFile: target.entryFile,
         entryKey: target.entryKey,

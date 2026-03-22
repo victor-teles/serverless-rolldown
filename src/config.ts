@@ -140,6 +140,8 @@ export interface BuildRequest {
   usePolling?: number;
 }
 
+export interface MultiBuildRequest extends Omit<BuildRequest, "singleEntry"> {}
+
 function normalizeUserOutput(
   output?: OutputOptions | OutputOptions[],
 ): OutputOptions {
@@ -309,6 +311,18 @@ export async function runRolldownBuild(request: BuildRequest): Promise<void> {
     output,
     write: true,
   });
+}
+
+export async function runRolldownBuilds(
+  request: MultiBuildRequest,
+): Promise<void> {
+  for (const target of request.targets) {
+    await runRolldownBuild({
+      ...request,
+      singleEntry: true,
+      targets: [target],
+    });
+  }
 }
 
 export function startRolldownWatch(request: BuildRequest): RolldownWatcher {

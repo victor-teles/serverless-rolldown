@@ -1,4 +1,4 @@
-import { access, readdir, rm } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
 import path from "node:path";
 
 const exampleDir = path.resolve(import.meta.dir, "..");
@@ -62,12 +62,22 @@ async function assertPathExistsInAny(targetPaths: string[]): Promise<string> {
   );
 }
 
-async function assertNonEmptyDirectory(targetPath: string): Promise<void> {
-  const entries = await readdir(targetPath);
-  if (entries.length === 0) {
-    throw new Error(
-      `Expected directory to contain files: ${path.relative(exampleDir, targetPath)}`,
-    );
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function assertPathsDoNotExist(targetPaths: string[]): Promise<void> {
+  for (const targetPath of targetPaths) {
+    if (await pathExists(targetPath)) {
+      throw new Error(
+        `Expected path to be absent: ${path.relative(exampleDir, targetPath)}`,
+      );
+    }
   }
 }
 
@@ -77,6 +87,24 @@ function assertOutputContains(output: string, expectedText: string): void {
       `Expected invoke output to include "${expectedText}", received:\n${output}`,
     );
   }
+}
+
+async function runBuiltHandler(builtFile: string): Promise<string> {
+  const executionResult = await runCommand(
+    [
+      "node",
+      "-e",
+      [
+        `const mod = require(${JSON.stringify(builtFile)});`,
+        "Promise.resolve(mod.handler())",
+        "  .then((value) => { process.stdout.write(String(value)); })",
+        "  .catch((error) => { console.error(error); process.exit(1); });",
+      ].join("\n"),
+    ],
+    "execute built handler",
+  );
+
+  return executionResult.stdout;
 }
 
 async function main(): Promise<void> {
@@ -90,17 +118,21 @@ async function main(): Promise<void> {
       path.join(packageBuildDir, "functions", "hello", "index.js"),
     ),
   );
-  await assertPathExistsInAny(
+  const goodbyeBuildFile = await assertPathExistsInAny(
     packageBuildDirectories.map((packageBuildDir) =>
       path.join(packageBuildDir, "functions", "goodbye", "index.js"),
     ),
   );
-  await assertNonEmptyDirectory(
-    await assertPathExistsInAny(
-      packageBuildDirectories.map((packageBuildDir) =>
-        path.join(packageBuildDir, "_chunks"),
-      ),
+  await assertPathsDoNotExist(
+    packageBuildDirectories.map((packageBuildDir) =>
+      path.join(packageBuildDir, "_chunks"),
     ),
+  );
+
+  console.log("Running packaged AWS SDK smoke validation...");
+  assertOutputContains(
+    await runBuiltHandler(goodbyeBuildFile),
+    "goodbye:shared-smoke",
   );
 
   console.log("Running invoke-local smoke validation...");

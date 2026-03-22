@@ -8,41 +8,9 @@ import {
   createTempService,
   pathExists,
   removeDirectory,
+  runBuiltHandlerWithNode,
   waitFor,
 } from "./helpers";
-
-async function runBuiltHandlerWithNode(
-  builtFile: string,
-  nodePath: string | undefined,
-): Promise<{ stderr: string; stdout: string }> {
-  const script = `
-const mod = require(${JSON.stringify(builtFile)});
-Promise.resolve(mod.handler())
-	.then((value) => {
-		process.stdout.write(String(value));
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
-`;
-  const processResult = Bun.spawn({
-    cmd: ["node", "-e", script],
-    env: {
-      ...process.env,
-      NODE_PATH: nodePath ?? "",
-    },
-    stderr: "pipe",
-    stdout: "pipe",
-  });
-
-  await processResult.exited;
-
-  return {
-    stderr: await new Response(processResult.stderr).text(),
-    stdout: await new Response(processResult.stdout).text(),
-  };
-}
 
 async function builtFileContains(
   filePath: string,
@@ -258,16 +226,25 @@ export async function handler() {
   }
 });
 
-test("serverless-offline prepares watched output and restores runtime state on stop", async () => {
+test("serverless-offline prepares multi-function watched outputs and restores runtime state on stop", async () => {
   const serviceDir = await createTempService({
-    "src/bar.ts": `
+    "src/foo.ts": `
+import { buildMessage } from "./shared";
+
 export async function handler() {
-	return "bar";
+	return buildMessage("foo");
 }
 `,
-    "src/foo.ts": `
+    "src/bar.ts": `
+import { buildMessage } from "./shared";
+
 export async function handler() {
-	return "offline-before";
+	return buildMessage("bar");
+}
+`,
+    "src/shared.ts": `
+export function buildMessage(name: string) {
+	return \`\${name}:offline-before\`;
 }
 `,
   });
@@ -280,12 +257,20 @@ export async function handler() {
     serviceDir,
   });
   const plugin = new ServerlessRolldown(serverless, {});
-  const builtFile = path.join(
+  const fooBuiltFile = path.join(
     serviceDir,
     DEFAULT_OUT_DIR,
     "offline",
     "functions",
     "foo",
+    "index.js",
+  );
+  const barBuiltFile = path.join(
+    serviceDir,
+    DEFAULT_OUT_DIR,
+    "offline",
+    "functions",
+    "bar",
     "index.js",
   );
 
@@ -302,22 +287,61 @@ export async function handler() {
     expect(serverless.service.getFunction("bar").handler).toBe(
       `${DEFAULT_OUT_DIR}/offline/functions/bar/index.handler`,
     );
-    await waitFor(async () => builtFileContains(builtFile, "offline-before"), {
-      timeoutMs: 5000,
+    expect(
+      await pathExists(
+        path.join(serviceDir, DEFAULT_OUT_DIR, "offline", "_chunks"),
+      ),
+    ).toBeFalse();
+    await waitFor(
+      async () => builtFileContains(fooBuiltFile, "offline-before"),
+      {
+        timeoutMs: 5000,
+      },
+    );
+    await waitFor(
+      async () => builtFileContains(barBuiltFile, "offline-before"),
+      {
+        timeoutMs: 5000,
+      },
+    );
+    expect(await runBuiltHandlerWithNode(fooBuiltFile)).toEqual({
+      stderr: "",
+      stdout: "foo:offline-before",
+    });
+    expect(await runBuiltHandlerWithNode(barBuiltFile)).toEqual({
+      stderr: "",
+      stdout: "bar:offline-before",
     });
 
     await writeFile(
-      path.join(serviceDir, "src", "foo.ts"),
+      path.join(serviceDir, "src", "shared.ts"),
       `
-export async function handler() {
-	return "offline-after";
+export function buildMessage(name: string) {
+	return \`\${name}:offline-after\`;
 }
 `,
       "utf8",
     );
 
-    await waitFor(async () => builtFileContains(builtFile, "offline-after"), {
-      timeoutMs: 5000,
+    await waitFor(
+      async () => builtFileContains(fooBuiltFile, "offline-after"),
+      {
+        timeoutMs: 5000,
+      },
+    );
+    await waitFor(
+      async () => builtFileContains(barBuiltFile, "offline-after"),
+      {
+        timeoutMs: 5000,
+      },
+    );
+    expect(await runBuiltHandlerWithNode(fooBuiltFile)).toEqual({
+      stderr: "",
+      stdout: "foo:offline-after",
+    });
+    expect(await runBuiltHandlerWithNode(barBuiltFile)).toEqual({
+      stderr: "",
+      stdout: "bar:offline-after",
     });
 
     await plugin.hooks["offline:start:end"]?.();
